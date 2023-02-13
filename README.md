@@ -2,6 +2,10 @@
 
 x70.dev is a personal experimentation platform for exploring new technologies, programming languages, infrastructure, cloud, security, and AI. It serves as a place for the author to experiment, learn and showcase various technology related projects and ideas.
 
+## Build the wasm binary
+Something similar to this:
+`GOOS=js GOARCH=wasm go build -o ../../assets/main.wasm`
+
 ## What you'll find on x70.dev
 
 - Personal experiments and projects related to technology and software development
