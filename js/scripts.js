@@ -12,7 +12,7 @@ var footer = "";
 
 //load our wasm file
 const go = new Go();
-WebAssembly.instantiateStreaming(fetch("assets/main.wasm"), go.importObject).then((result) => {
+WebAssembly.instantiateStreaming(fetch("https://assets.x70.dev/main.wasm"), go.importObject).then((result) => {
   go.run(result.instance);
   footer = footer + "<a id=wasmFooter></a>";
   document.getElementById("footer").innerHTML = footer;
