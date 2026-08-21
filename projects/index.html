@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Experiments — x70.dev</title>
+<meta name="description" content="Everything running on x70.dev, and everything planned — with an honest status on each.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0B0E12">
+<link rel="canonical" href="https://x70.dev/projects/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://x70.dev/projects/">
+<meta property="og:site_name" content="x70.dev">
+<meta property="og:title" content="Experiments — x70.dev">
+<meta property="og:description" content="Everything running on x70.dev, and everything planned — with an honest status on each.">
+<meta property="og:image" content="https://assets.x70.dev/images/man-in-hat.webp">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/ibm-plex-mono-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/archivo-400700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/styles.css">
+<script type="module" src="/js/site.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="rail">
+  <div class="wrap rail__in">
+    <a class="mark" href="/">x70<span>.dev</span></a>
+    <nav class="rail__nav" aria-label="Primary">
+      <a href="/">index</a>
+      <a href="/projects/" aria-current="page">experiments</a>
+      <a href="/writing/">writing</a>
+      <a href="https://github.com/zroulston/x70.dev">source</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="section wrap section--flush">
+    <div class="section__head">
+      <h1 class="section__title">Experiments</h1>
+      <p class="label">status is honest: live means it runs</p>
+    </div>
+    <p class="caveat caveat--lead">
+      Each entry carries a status rather than a date, because the useful question is
+      <b>does it run</b>, not when it was started. <b>live</b> means you can use it on this
+      site right now. <b>wip</b> means it partly exists. <b>planned</b> means nothing is
+      built yet and the entry is a placeholder.
+    </p>
+    <ul class="rack" id="rack"></ul>
+  </section>
+
+  <section class="section wrap" aria-labelledby="bench-detail">
+    <div class="section__head">
+      <h2 class="section__title" id="bench-detail">go-wasm-bench</h2>
+      <span class="tok" data-s="live">live</span>
+    </div>
+    <div class="prose">
+      <p>
+        A Go program compiled to WebAssembly and a hand-written JavaScript implementation
+        run the same workload: hash a 64-byte block with SHA-256, then feed each digest
+        back in as the next input, 250,000 times. Chaining is deliberate — it stops either
+        engine from hoisting the work out of the loop.
+      </p>
+      <p>
+        Both sides return their final digest. If the digests match, the two engines
+        provably did identical work, which is what makes the timing comparable at all.
+        Both also get a short warm-up pass, so neither is measured cold against a
+        warmed rival.
+      </p>
+      <p>
+        The result is often not what people expect. A JIT-warmed JavaScript engine is
+        extremely good at 32-bit integer arithmetic, which is essentially all SHA-256 is.
+        Run it yourself on the <a class="link" href="/">index page</a>.
+      </p>
+      <p class="label u-mt">
+        source · <a class="link" href="https://github.com/zroulston/x70.dev/blob/main/cmd/wasm/main.go">cmd/wasm/main.go</a>
+        · <a class="link" href="https://github.com/zroulston/x70.dev/blob/main/js/sha256.js">js/sha256.js</a>
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap foot__in">
+    <span>© <span id="year"></span> x70.dev</span>
+    <span class="foot__sep">/</span>
+    <a href="/">index</a>
+    <span class="foot__sep">/</span>
+    <button class="btn-link" id="disclaimer-open" type="button">disclaimer</button>
+    <span class="foot__sep">/</span>
+    <a href="https://github.com/zroulston/x70.dev">source</a>
+  </div>
+</footer>
+</body>
+</html>

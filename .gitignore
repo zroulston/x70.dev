@@ -3,3 +3,5 @@
 
 # built artifacts (main.wasm is served from Cloudflare R2)
 assets/*.wasm
+dist/
+.playwright-mcp/

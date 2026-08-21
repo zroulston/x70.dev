@@ -1,0 +1,55 @@
+# x70.dev
+#
+# IMPORTANT: assets/main.wasm and js/wasm_exec.js are a matched pair. The JS
+# shim must come from the same Go toolchain that compiled the binary, so
+# `make wasm` always refreshes both together. Never deploy one without the other.
+
+GO      ?= go
+PORT    ?= 9090
+GOROOT  := $(shell $(GO) env GOROOT)
+WASM    := assets/main.wasm
+
+.PHONY: all build wasm shim serve check test dist fonts clean
+
+all: build
+
+build: wasm
+
+## wasm: compile the Go engine and sync the matching JS shim
+wasm: shim
+	GOOS=js GOARCH=wasm $(GO) build -trimpath -ldflags="-s -w" -o $(WASM) ./cmd/wasm
+	@echo "built $(WASM) ($$(du -h $(WASM) | cut -f1)) with $$($(GO) env GOVERSION)"
+
+## shim: copy wasm_exec.js out of the active GOROOT
+shim:
+	@cp "$(GOROOT)/lib/wasm/wasm_exec.js" js/wasm_exec.js
+	@echo "synced js/wasm_exec.js from $$($(GO) env GOVERSION)"
+
+## serve: build, then serve the site at http://localhost:$(PORT)
+serve: build
+	@echo "serving on http://localhost:$(PORT)"
+	$(GO) run ./cmd/server -port $(PORT)
+
+## check: vet the Go packages under their real build constraints
+check:
+	GOOS=js GOARCH=wasm $(GO) vet ./cmd/wasm
+	$(GO) vet ./cmd/server
+
+## test: verify the JS SHA-256 matches a known-good implementation
+test:
+	node scripts/test-sha256.mjs
+
+## dist: assemble exactly the files that get published, and nothing else
+dist: build
+	rm -rf dist && mkdir -p dist
+	cp index.html favicon.svg favicon.ico robots.txt sitemap.xml dist/
+	cp -R css js fonts projects writing dist/
+	@echo "dist/ ready ($$(find dist -type f | wc -l | tr -d ' ') files, $$(du -sh dist | cut -f1))"
+	@echo "note: assets/main.wasm is published separately to the assets bucket"
+
+## fonts: re-download the self-hosted latin font subsets
+fonts:
+	./scripts/fonts.sh
+
+clean:
+	rm -rf dist $(WASM)

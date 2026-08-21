@@ -1,64 +1,70 @@
+// Command wasm is the Go half of the x70.dev engine benchmark.
+//
+// It exposes a single chained-SHA-256 workload to JavaScript. The same
+// workload is implemented in js/sha256.js, so the two can be raced against
+// each other in the browser. Both sides return their final digest: if the
+// digests match, the two engines provably did identical work.
 package main
 
 import (
-	"fmt"
-	"strings"
+	"crypto/sha256"
+	"encoding/hex"
+	"runtime"
 	"syscall/js"
 	"time"
 )
 
-var (
-	now         = time.Now()
-	currentYear = now.Format("2006")
-)
+// chain hashes a 64-byte block, then feeds each digest back in as the next
+// input, iterations times. Chaining is deliberate: it defeats any attempt by
+// either engine to hoist the work out of the loop.
+func chain(iterations int) (digest string, elapsed float64) {
+	var block [64]byte
+	for i := range block {
+		block[i] = byte(i)
+	}
 
-func GetDisclamier() js.Func {
-	sb := strings.Builder{}
-	sb.WriteString("<div class=\"modal-content\">")
-	sb.WriteString("<span id=\"span\" class=\"close\">&times;</span>")
-	sb.WriteString("<h2>Disclaimer</h2>")
-	sb.WriteString("<p>")
-	sb.WriteString("  The information contained on x70.dev website (the \"Service\") is for general information purposes only. x70.dev assumes no responsibility for errors or omissions in the contents of the Service.")
-	sb.WriteString("</p>")
-	sb.WriteString("<p>")
-	sb.WriteString("  In no event shall x70.dev be liable for any special, direct, indirect, consequential, or incidental damages or any damages whatsoever, whether in an action of contract, negligence or other tort, arising out of or in connection with the use of the Service or the contents of the Service. x70.dev reserves the right to make additions, deletions, or modification to the contents on the Service at any time without prior notice.")
-	sb.WriteString("</p>")
-	sb.WriteString("<p>")
-	sb.WriteString("  This website may contain links to external websites that are not provided or maintained by or in any way affiliated with x70.dev. Please note that x70.dev does not guarantee the accuracy, relevance, timeliness, or completeness of any information on these external websites.")
-	sb.WriteString("</p>")
-	sb.WriteString("<p>")
-	sb.WriteString("  Please be aware that x70.dev is not responsible for the privacy practices of such other sites. We encourage our users to be aware when they leave our site and to read the privacy statements of each and every website that collects personally identifiable information.")
-	sb.WriteString("</p>")
-	sb.WriteString("<p>")
-	sb.WriteString("  The Service is provided on an \"as is\" basis without any warranties of any kind. x70.dev makes no warranties, expressed or implied, and hereby disclaims and negates all other warranties including, without limitation, implied warranties or conditions of merchantability, fitness for a particular purpose, or non-infringement of intellectual property or other violation of rights.")
-	sb.WriteString("</p>")
-	sb.WriteString("<p>")
-	sb.WriteString("  By using this website, you agree to the above disclaimer. If you do not agree with the above disclaimer, please do not use the Service.")
-	sb.WriteString("</p>")
-	sb.WriteString("</div>")
-	disclaimer := sb.String()
-	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		return disclaimer
-	})
+	start := time.Now()
+	sum := sha256.Sum256(block[:])
+	for i := 1; i < iterations; i++ {
+		sum = sha256.Sum256(sum[:])
+	}
+	elapsed = float64(time.Since(start).Nanoseconds()) / 1e6
+
+	return hex.EncodeToString(sum[:]), elapsed
 }
 
-func GetFooter() js.Func {
-	sb := strings.Builder{}
-	sb.WriteString("[copyright &copy")
-	sb.WriteString(currentYear)
-	sb.WriteString(" x70.dev - all rights reserved | <a id='disclaimerLink'>disclaimer</a> | <a id='gitHubLink'>source</a>]")
-	footer := sb.String()
+// bench is called from JS as x70.bench(iterations). It returns the elapsed
+// milliseconds and the final digest.
+func bench() js.Func {
+	return js.FuncOf(func(this js.Value, args []js.Value) any {
+		iterations := 250000
+		if len(args) > 0 && args[0].Type() == js.TypeNumber {
+			iterations = args[0].Int()
+		}
+		if iterations < 1 {
+			iterations = 1
+		}
 
-	return js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		return footer
+		digest, elapsed := chain(iterations)
+		return map[string]any{
+			"ms":         elapsed,
+			"digest":     digest,
+			"iterations": iterations,
+		}
 	})
 }
 
 func main() {
-	ch := make(chan struct{}, 0)
-	fmt.Println("go wasm library loaded")
+	js.Global().Set("x70", js.ValueOf(map[string]any{
+		"bench":     bench(),
+		"goVersion": runtime.Version(),
+		"arch":      runtime.GOOS + "/" + runtime.GOARCH,
+	}))
 
-	js.Global().Set("getFooter", GetFooter())
-	js.Global().Set("getDisclaimer", GetDisclamier())
-	<-ch
+	// Signal readiness so the page can enable the run control.
+	if cb := js.Global().Get("__x70Ready"); cb.Type() == js.TypeFunction {
+		cb.Invoke()
+	}
+
+	select {} // keep the exported funcs alive
 }

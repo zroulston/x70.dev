@@ -1,0 +1,88 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Two R2 buckets back this site:
+#   R2_SITE_BUCKET   -> x70.dev          (html, css, js, fonts)
+#   R2_ASSETS_BUCKET -> assets.x70.dev   (main.wasm, images)
+#
+# Required repository secrets:
+#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+#   R2_SITE_BUCKET, R2_ASSETS_BUCKET
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: auto
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Vet
+        run: make check
+
+      - name: Test the JavaScript SHA-256 against a known-good implementation
+        run: make test
+
+      # `make dist` runs `make wasm`, which rebuilds main.wasm AND re-copies
+      # js/wasm_exec.js out of this toolchain's GOROOT. They are a matched pair.
+      - name: Build
+        run: make dist
+
+      - name: Check the wasm shim matches the compiling toolchain
+        run: |
+          diff "$(go env GOROOT)/lib/wasm/wasm_exec.js" dist/js/wasm_exec.js \
+            || { echo "::error::js/wasm_exec.js does not match $(go env GOVERSION)"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: |
+            dist
+            assets/main.wasm
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+
+      - name: Publish the WebAssembly binary first
+        # The binary goes up before the HTML/JS that loads it, so a visitor
+        # mid-deploy never gets new page code pointing at an old engine.
+        run: |
+          aws s3 cp assets/main.wasm "s3://${{ secrets.R2_ASSETS_BUCKET }}/main.wasm" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
+            --content-type application/wasm \
+            --cache-control "public, max-age=3600"
+
+      - name: Publish the site
+        run: |
+          # Long-cache the fingerprint-free static assets, revalidate the HTML.
+          aws s3 sync dist "s3://${{ secrets.R2_SITE_BUCKET }}" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
+            --delete \
+            --exclude "*.html" \
+            --cache-control "public, max-age=86400"
+
+          aws s3 sync dist "s3://${{ secrets.R2_SITE_BUCKET }}" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
+            --exclude "*" --include "*.html" \
+            --content-type "text/html; charset=utf-8" \
+            --cache-control "public, max-age=0, must-revalidate"

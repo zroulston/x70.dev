@@ -1,19 +1,156 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <script src="js/wasm_exec.js"></script>
-  <script src="js/scripts.js"></script>
-  <link rel="stylesheet" href="css/styles.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>x70.dev — a testbed that runs in the open</title>
+<meta name="description" content="A personal engineering testbed. Go compiled to WebAssembly races a hand-written JavaScript SHA-256 in your browser, and both print their digest so you can verify the work.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0B0E12">
+
+<link rel="canonical" href="https://x70.dev/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://x70.dev/">
+<meta property="og:site_name" content="x70.dev">
+<meta property="og:title" content="x70.dev — a testbed that runs in the open">
+<meta property="og:description" content="Go compiled to WebAssembly races a hand-written JavaScript SHA-256 in your browser. Both print their digest, so you can check the comparison is honest.">
+<meta property="og:image" content="https://assets.x70.dev/images/man-in-hat.webp">
+<meta property="og:image:width" content="1024">
+<meta property="og:image:height" content="1024">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="x70.dev — a testbed that runs in the open">
+<meta name="twitter:description" content="Go compiled to WebAssembly races a hand-written JavaScript SHA-256 in your browser.">
+<meta name="twitter:image" content="https://assets.x70.dev/images/man-in-hat.webp">
+
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/favicon.ico">
+<link rel="preconnect" href="https://assets.x70.dev" crossorigin>
+<link rel="preload" href="/fonts/ibm-plex-mono-600.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/archivo-400700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/css/styles.css">
+<script type="module" src="/js/site.js"></script>
 </head>
-<title>x70.dev</title>
-<body class="body">
-  <div>
-    <img src="https://assets.x70.dev/images/man-in-hat.webp" alt="logo" class="center">
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="rail">
+  <div class="wrap rail__in">
+    <a class="mark" href="/">x70<span>.dev</span></a>
+    <span class="lamp" id="lamp" data-state="idle">engine idle</span>
+    <nav class="rail__nav" aria-label="Primary">
+      <a href="/" aria-current="page">index</a>
+      <a href="/projects/">experiments</a>
+      <a href="/writing/">writing</a>
+      <a href="https://github.com/zroulston/x70.dev">source</a>
+    </nav>
   </div>
-  <div id="disclaimerModal" class="modal">
+</header>
+
+<main id="main">
+
+  <section class="hero">
+    <div class="wrap hero__in">
+      <div>
+        <h1 class="hero__thesis">Nothing here is a screenshot.</h1>
+        <p class="hero__lede">
+          x70.dev is where I try things in infrastructure, systems and security and
+          leave them running. The panel below is <strong>a Go program compiled to
+          WebAssembly</strong>, executing on your machine, against a JavaScript
+          implementation of the same algorithm.
+        </p>
+      </div>
+      <img class="hero__emblem"
+           src="https://assets.x70.dev/images/man-in-hat.webp"
+           alt="The x70.dev emblem: a chrome mechanical medallion on black, ringed by circuit traces and gears."
+           width="1024" height="1024" fetchpriority="high" decoding="async">
+    </div>
+  </section>
+
+  <section class="bench wrap" aria-labelledby="bench-title">
+    <div class="panel">
+      <div class="panel__head">
+        <h2 class="section__title" id="bench-title">Engine comparison</h2>
+        <p class="label">SHA-256 · chained · <span id="iter-label">250,000</span> iterations</p>
+        <p class="label label--raw u-push" id="build-label"></p>
+      </div>
+
+      <div class="panel__body">
+
+        <div class="trace trace--go">
+          <div class="trace__top">
+            <span class="trace__name">go / wasm</span>
+            <span class="trace__time" id="go-time" data-empty="true">— ms</span>
+          </div>
+          <div class="trace__track">
+            <div class="trace__fill" id="go-fill"></div>
+          </div>
+          <p class="trace__digest" id="go-digest"></p>
+        </div>
+
+        <div class="trace trace--js">
+          <div class="trace__top">
+            <span class="trace__name">javascript</span>
+            <span class="trace__time" id="js-time" data-empty="true">— ms</span>
+          </div>
+          <div class="trace__track">
+            <div class="trace__fill" id="js-fill"></div>
+          </div>
+          <p class="trace__digest" id="js-digest"></p>
+        </div>
+
+        <p class="verdict" id="verdict" hidden></p>
+
+        <div class="bench__controls">
+          <button class="btn" id="run" type="button">Run on my machine</button>
+          <span class="bench__status" id="status" role="status">
+            The WebAssembly binary is 2.4&nbsp;MB and only downloads when you press run.
+          </span>
+        </div>
+
+        <p class="caveat">
+          <b>What this shows, and what it doesn't.</b> Both engines run the same chained
+          SHA-256 on the same thread, and each prints its final digest — if the digests
+          match, they provably did identical work. But this measures one integer-heavy
+          loop, not WebAssembly in general. A warmed-up JavaScript JIT is very good at
+          exactly this shape of problem, so don't read the result as a verdict on either
+          runtime. <code>crypto.subtle</code> would beat both by a wide margin.
+        </p>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="section wrap" aria-labelledby="rack-title">
+    <div class="section__head">
+      <h2 class="section__title" id="rack-title">Experiments</h2>
+      <a class="link" href="/projects/">All experiments →</a>
+    </div>
+    <ul class="rack" id="rack"></ul>
+  </section>
+
+  <section class="section wrap" aria-labelledby="log-title">
+    <div class="section__head">
+      <h2 class="section__title" id="log-title">Writing</h2>
+    </div>
+    <div class="empty">
+      <p>No posts yet. Notes on the experiments above will land here first.</p>
+      <p>Until then, the <a class="link" href="https://github.com/zroulston/x70.dev">commit log</a> is the honest version.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="wrap foot__in">
+    <span>© <span id="year"></span> x70.dev</span>
+    <span class="foot__sep">/</span>
+    <button class="btn-link" id="disclaimer-open" type="button">disclaimer</button>
+    <span class="foot__sep">/</span>
+    <a href="https://github.com/zroulston/x70.dev">source</a>
+    <span class="foot__build" id="engine-label"></span>
   </div>
-</body>
-<footer
-  <p id="footer"</p>
 </footer>
+
+
+</body>
 </html>
