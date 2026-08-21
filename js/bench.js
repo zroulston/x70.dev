@@ -3,9 +3,19 @@
 
 import { chain as jsChain } from './sha256.js';
 
+// Stamped by `make dist` with a hash of main.wasm.
+//
+// wasm_exec.js and main.wasm are a matched pair, and the pairing has to hold
+// in the visitor's cache too, not just in the bucket. A returning visitor
+// holding a wasm_exec.js from an earlier deploy will fail to instantiate a
+// newer binary -- the import namespace changed from "go" to "gojs" in Go 1.24,
+// which surfaces as `Import #0 "gojs": module is not an object or function`.
+// Keying both URLs to the binary's hash makes them bust together.
+const BUILD = '__BUILD__';
+
 // Same-origin: x70.dev and assets.x70.dev are two custom domains on one R2
 // bucket, so there is nothing to gain from crossing origins to fetch this.
-const WASM_URL = '/main.wasm';
+const WASM_URL = `/main.wasm?v=${BUILD}`;
 const ITERATIONS = 250000;
 const WARMUP = 5000;
 
@@ -36,7 +46,7 @@ function loadEngine() {
       throw new Error('this browser has no WebAssembly support');
     }
 
-    await loadScript('/js/wasm_exec.js');
+    await loadScript(`/js/wasm_exec.js?v=${BUILD}`);
 
     const ready = new Promise((resolve) => {
       window.__x70Ready = resolve;
