@@ -7,7 +7,7 @@
 GO      ?= go
 PORT    ?= 9090
 GOROOT  := $(shell $(GO) env GOROOT)
-WASM    := assets/main.wasm
+WASM    := main.wasm
 
 .PHONY: all build wasm shim serve check test dist fonts clean
 
@@ -42,10 +42,9 @@ test:
 ## dist: assemble exactly the files that get published, and nothing else
 dist: build
 	rm -rf dist && mkdir -p dist
-	cp index.html favicon.svg favicon.ico robots.txt sitemap.xml dist/
-	cp -R css js fonts projects writing dist/
+	cp index.html favicon.svg favicon.ico robots.txt sitemap.xml $(WASM) dist/
+	cp -R css js fonts images projects writing dist/
 	@echo "dist/ ready ($$(find dist -type f | wc -l | tr -d ' ') files, $$(du -sh dist | cut -f1))"
-	@echo "note: assets/main.wasm is published separately to the assets bucket"
 
 ## fonts: re-download the self-hosted latin font subsets
 fonts:

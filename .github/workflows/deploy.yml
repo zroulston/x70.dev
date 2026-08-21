@@ -5,17 +5,18 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Two R2 buckets back this site:
-#   R2_SITE_BUCKET   -> x70.dev          (html, css, js, fonts)
-#   R2_ASSETS_BUCKET -> assets.x70.dev   (main.wasm, images)
+# x70.dev is a single R2 bucket (www-x70-dev) with two custom domains bound to
+# it: x70.dev and assets.x70.dev. Everything is published to that one bucket.
 #
-# Required repository secrets:
-#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
-#   R2_SITE_BUCKET, R2_ASSETS_BUCKET
+# Required repository secret:
+#   CLOUDFLARE_API_TOKEN  — an API token with "Workers R2 Storage: Edit"
+#
+# Required repository variables:
+#   CLOUDFLARE_ACCOUNT_ID, R2_BUCKET
 env:
-  AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-  AWS_DEFAULT_REGION: auto
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+  BUCKET: ${{ vars.R2_BUCKET }}
 
 jobs:
   build:
@@ -49,10 +50,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: site
-          path: |
-            dist
-            assets/main.wasm
+          name: dist
+          path: dist
 
   deploy:
     needs: build
@@ -61,28 +60,62 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: site
+          name: dist
+          path: dist
 
-      - name: Publish the WebAssembly binary first
-        # The binary goes up before the HTML/JS that loads it, so a visitor
-        # mid-deploy never gets new page code pointing at an old engine.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # R2 stores the content type per object, so it has to be set on upload —
+      # there is no server-side extension sniffing to fall back on. A wrong
+      # type here is fatal for two files in particular: main.wasm must be
+      # application/wasm for instantiateStreaming, and the ES modules must be
+      # text/javascript or the browser refuses to execute them.
+      - name: Publish to R2
         run: |
-          aws s3 cp assets/main.wasm "s3://${{ secrets.R2_ASSETS_BUCKET }}/main.wasm" \
-            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
-            --content-type application/wasm \
-            --cache-control "public, max-age=3600"
+          set -euo pipefail
 
-      - name: Publish the site
-        run: |
-          # Long-cache the fingerprint-free static assets, revalidate the HTML.
-          aws s3 sync dist "s3://${{ secrets.R2_SITE_BUCKET }}" \
-            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
-            --delete \
-            --exclude "*.html" \
-            --cache-control "public, max-age=86400"
+          content_type() {
+            case "$1" in
+              *.html)  echo "text/html; charset=utf-8" ;;
+              *.css)   echo "text/css; charset=utf-8" ;;
+              *.js|*.mjs) echo "text/javascript; charset=utf-8" ;;
+              *.wasm)  echo "application/wasm" ;;
+              *.woff2) echo "font/woff2" ;;
+              *.webp)  echo "image/webp" ;;
+              *.svg)   echo "image/svg+xml" ;;
+              *.ico)   echo "image/x-icon" ;;
+              *.xml)   echo "application/xml" ;;
+              *.txt)   echo "text/plain; charset=utf-8" ;;
+              *)       echo "application/octet-stream" ;;
+            esac
+          }
 
-          aws s3 sync dist "s3://${{ secrets.R2_SITE_BUCKET }}" \
-            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
-            --exclude "*" --include "*.html" \
-            --content-type "text/html; charset=utf-8" \
-            --cache-control "public, max-age=0, must-revalidate"
+          # HTML must revalidate so a deploy is visible immediately; everything
+          # else is content that only changes when its bytes change.
+          cache_control() {
+            case "$1" in
+              *.html) echo "public, max-age=0, must-revalidate" ;;
+              *)      echo "public, max-age=86400" ;;
+            esac
+          }
+
+          # Upload main.wasm first, so a visitor loading the page mid-deploy
+          # never gets new page code pointing at an older engine.
+          ordered=$( { [ -f dist/main.wasm ] && echo dist/main.wasm
+                       find dist -type f ! -name main.wasm ! -name '*.html'
+                       find dist -type f -name '*.html'; } )
+
+          count=0
+          while IFS= read -r file; do
+            key="${file#dist/}"
+            npx --yes wrangler@4 r2 object put "$BUCKET/$key" \
+              --file "$file" \
+              --remote \
+              --content-type "$(content_type "$file")" \
+              --cache-control "$(cache_control "$file")"
+            count=$((count + 1))
+          done <<< "$ordered"
+
+          echo "published $count objects to $BUCKET"

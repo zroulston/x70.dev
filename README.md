@@ -35,6 +35,8 @@ writing/            posts (empty for now)
 css/                styles.css, plus generated fonts.css
 js/                 site.js, bench.js, sha256.js, experiments.js, wasm_exec.js
 fonts/              self-hosted latin subsets — no third-party font requests
+images/             the emblem
+main.wasm           built artifact, gitignored (make wasm)
 cmd/wasm/           the Go engine, compiled to WebAssembly
 cmd/server/         local dev file server, not used in production
 scripts/            font sync and the SHA-256 test
@@ -53,12 +55,16 @@ make dist      # assemble exactly the files that get published
 make fonts     # re-download the self-hosted font subsets
 ```
 
-When running on localhost the page loads `/assets/main.wasm` from the local
-build; in production it loads it from `assets.x70.dev`.
+Everything the page loads is same-origin, so `make serve` behaves exactly like
+production. To preview the published tree byte for byte:
+
+```sh
+make dist && go run ./cmd/server -port 9091 -dir dist
+```
 
 ### One rule about the WebAssembly build
 
-`assets/main.wasm` and `js/wasm_exec.js` are a **matched pair**. The JS shim must
+`main.wasm` and `js/wasm_exec.js` are a **matched pair**. The JS shim must
 come from the same Go toolchain that compiled the binary, or the page breaks at
 `instantiateStreaming` with an ABI mismatch. `make wasm` always refreshes both
 together — never update one on its own. CI enforces this with a `diff` against
@@ -66,14 +72,41 @@ the build toolchain's `GOROOT`.
 
 ## Deploying
 
-Pushing to `main` runs `.github/workflows/deploy.yml`, which vets, tests, builds
-`dist/`, and syncs to two R2 buckets: the site bucket for HTML/CSS/JS/fonts, and
-the assets bucket for `main.wasm`. The binary is published *before* the page code
-that loads it, so a visitor mid-deploy never gets new HTML pointing at an old
-engine.
+`x70.dev` and `assets.x70.dev` are two custom domains bound to a **single** R2
+bucket (`www-x70-dev`), so there is one place to publish to and the site loads
+everything same-origin.
 
-Required repository secrets: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
-`R2_SECRET_ACCESS_KEY`, `R2_SITE_BUCKET`, `R2_ASSETS_BUCKET`.
+Pushing to `main` runs `.github/workflows/deploy.yml`, which vets, tests, builds
+`dist/`, and uploads it with `wrangler r2 object put`. No AWS tooling is
+involved. `main.wasm` goes up first and the HTML last, so a visitor loading the
+page mid-deploy never gets new page code pointing at an older engine.
+
+R2 stores the content type per object, so the workflow sets it explicitly on
+every upload. Two are load-bearing: `main.wasm` must be `application/wasm` or
+`instantiateStreaming` refuses it, and the ES modules must be `text/javascript`
+or the browser will not execute them.
+
+Set these on the repository (**Settings → Secrets and variables → Actions**):
+
+| Kind     | Name                    | Value                                      |
+| -------- | ----------------------- | ------------------------------------------ |
+| Secret   | `CLOUDFLARE_API_TOKEN`  | API token with **Workers R2 Storage: Edit** |
+| Variable | `CLOUDFLARE_ACCOUNT_ID` | your Cloudflare account ID                  |
+| Variable | `R2_BUCKET`             | `www-x70-dev`                               |
+
+### Removing stale objects
+
+`wrangler` has no `sync --delete`, so files dropped from the repo linger in the
+bucket until removed by hand:
+
+```sh
+wrangler r2 object delete www-x70-dev/js/scripts.js --remote
+wrangler r2 object delete www-x70-dev/images/x70-logo.jpg --remote
+```
+
+If this becomes a recurring annoyance, Cloudflare Workers Static Assets or Pages
+would give atomic deploys with automatic cleanup — and native `_headers`
+support, which would replace the Transform Rule below.
 
 ### Security headers
 
@@ -83,25 +116,21 @@ policy this site is written against:
 
 ```
 Content-Security-Policy: default-src 'none'; script-src 'self' 'wasm-unsafe-eval';
-  style-src 'self';
-  font-src 'self'; img-src 'self' https://assets.x70.dev;
-  connect-src 'self' https://assets.x70.dev; base-uri 'none'; form-action 'none';
-  frame-ancestors 'none'
+  style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self';
+  base-uri 'none'; form-action 'none'; frame-ancestors 'none'
 Referrer-Policy: strict-origin-when-cross-origin
 X-Content-Type-Options: nosniff
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
 
-Two directives are load-bearing and easy to get wrong:
-
-- **`'wasm-unsafe-eval'`** is required, or `WebAssembly.instantiateStreaming`
-  is refused and the benchmark cannot run. It permits WebAssembly compilation
-  *without* permitting JavaScript `eval`, which plain `'self'` does not.
-- **`connect-src https://assets.x70.dev`** is what allows the page to fetch
-  `main.wasm` cross-origin.
+Because everything is same-origin, the policy needs no remote hosts at all.
+One directive is load-bearing and easy to get wrong: **`'wasm-unsafe-eval'`** is
+required, or `WebAssembly.instantiateStreaming` is refused and the benchmark
+cannot run. It permits WebAssembly compilation *without* permitting JavaScript
+`eval`, which plain `'self'` does not.
 
 The site uses no inline scripts and no `style` attributes, so `'unsafe-inline'`
-is not needed. This policy is verified against the running site, not assumed.
+is not needed. This policy is verified against the built site, not assumed.
 
 ## Licence
 

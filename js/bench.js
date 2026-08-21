@@ -3,9 +3,9 @@
 
 import { chain as jsChain } from './sha256.js';
 
-// Local dev serves the freshly built binary; production reads it from R2.
-const LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
-const WASM_URL = LOCAL ? '/assets/main.wasm' : 'https://assets.x70.dev/main.wasm';
+// Same-origin: x70.dev and assets.x70.dev are two custom domains on one R2
+// bucket, so there is nothing to gain from crossing origins to fetch this.
+const WASM_URL = '/main.wasm';
 const ITERATIONS = 250000;
 const WARMUP = 5000;
 

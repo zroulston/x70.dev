@@ -1,7 +1,10 @@
 #!mac
 .DS_Store
 
-# built artifacts (main.wasm is served from Cloudflare R2)
-assets/*.wasm
+# build artifacts
+/main.wasm
 dist/
+
+# local tooling state
+.wrangler/
 .playwright-mcp/
