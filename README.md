@@ -103,10 +103,18 @@ not a theoretical one: Go 1.24 renamed the wasm import namespace from `go` to
 
 Uploading to the bucket is not the same as publishing. The custom domain sits
 behind Cloudflare's cache, which keeps serving the previous copy of a stable
-path like `/js/bench.js` until it is purged, so the workflow purges the zone
-after every upload. Without that step a deploy reports success while visitors
-continue to get the old site — and it is invisible to a spot check with a
-cache-busting query string, because that is a different cache key.
+path like `/js/bench.js` after a successful upload. This is invisible to a spot
+check with a cache-busting query string, because that is a different cache key.
+
+Two things address it, and the first is what makes a deploy reliable:
+
+- `scripts/stamp.sh` rewrites every internal reference — the module imports,
+  the stylesheet link and its `@import`, and the wasm and shim URLs — to carry
+  a build id derived from `main.wasm`. Each deploy is therefore a new set of
+  cache keys, so a fresh page can never pull a stale module, with or without a
+  purge.
+- The workflow also purges the zone after uploading, which clears the previous
+  build rather than leaving it to expire.
 
 Set these repository secrets (**Settings → Secrets and variables → Actions**):
 

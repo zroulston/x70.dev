@@ -44,10 +44,7 @@ dist: build
 	rm -rf dist && mkdir -p dist
 	cp index.html favicon.svg favicon.ico robots.txt sitemap.xml $(WASM) dist/
 	cp -R css js fonts images projects writing dist/
-	@BUILD=$$( { sha256sum $(WASM) 2>/dev/null || shasum -a 256 $(WASM); } | cut -c1-12 ); \
-	  sed -i.bak "s/__BUILD__/$$BUILD/g" dist/js/bench.js && rm -f dist/js/bench.js.bak; \
-	  grep -q "__BUILD__" dist/js/bench.js && { echo "build stamp failed"; exit 1; }; \
-	  echo "stamped build $$BUILD"
+	@./scripts/stamp.sh dist $(WASM)
 
 	@echo "dist/ ready ($$(find dist -type f | wc -l | tr -d ' ') files, $$(du -sh dist | cut -f1))"
 
