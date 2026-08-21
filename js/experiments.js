@@ -5,8 +5,8 @@
 //         'wip'     — partly built, not yet wired up
 //         'planned' — an intention, nothing built yet
 //
-// NOTE: 'go-wasm-bench' and 'edge-cache-probe' below are real. The rest are
-// placeholder slots marked 'planned' — replace them with your own work.
+// NOTE: the first three below are real. 'prompt-harness' is a placeholder slot
+// marked 'planned' — it needs an API key, which a static bundle cannot hold.
 
 export const experiments = [
   {
@@ -25,8 +25,9 @@ export const experiments = [
   },
   {
     name: 'header-audit',
-    status: 'planned',
-    desc: 'Check a domain’s security headers and report what is missing and why it matters.',
+    status: 'live',
+    href: '/projects/#header-audit',
+    desc: 'Grades this site’s own security headers against the policy it publishes, takes the CSP apart directive by directive, and says what each one is holding shut.',
     tags: ['security', 'http'],
   },
   {

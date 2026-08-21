@@ -48,7 +48,7 @@ a miss. `main.wasm` is requested as a one-byte range: cache eligibility does not
 depend on the range, and pulling 2.4 MB twice would cost more than the answer is
 worth.
 
-### What it found
+### What the probe found
 
 Measured from DFW on 2026-08-21, the three caching policies produce three
 different behaviours, and one of them is not the intended one:
@@ -75,6 +75,39 @@ live in a Transform Rule.
 That is the experiment doing its job: the header was set correctly and the
 result was still wrong, and nothing short of measuring it would have said so.
 
+## The header audit
+
+`/projects/#header-audit` reads the response headers off `/` and grades them
+against the policy this README publishes, explaining what each one is holding
+shut rather than just ticking it off.
+
+It audits **this** site and no other, and that is a hard limit rather than an
+unfinished feature. A browser cannot read response headers from another domain:
+a `no-cors` fetch returns an opaque response with nothing on it, and a normal
+cross-origin fetch exposes only the CORS-safelisted headers unless the far end
+opts in. Auditing an arbitrary domain needs a server to do the fetching, which a
+static bundle does not have.
+
+The CSP is taken apart directive by directive, because a policy can be present
+and still leave the important parts open. `frame-ancestors`, `base-uri` and
+`form-action` do **not** fall back to `default-src`, so `default-src 'none'` can
+look like a complete answer while doing nothing at all about framing, form
+targets or a rewritten `<base>`. A CSP with a failing directive drags the whole
+header down to a fail, rather than showing a green token above a list of red
+ones.
+
+### What the audit found
+
+**Nothing is set.** As of 2026-08-21, `https://x70.dev/` returns no
+`Content-Security-Policy`, no `Strict-Transport-Security`, no
+`X-Content-Type-Options` and no `Referrer-Policy` — 0 of the 4 headers below.
+The Transform Rule described under [Security headers](#security-headers) either
+does not exist on the zone or is not matching.
+
+This matters most for the benchmark: the documented policy is the only reason
+`'wasm-unsafe-eval'` was ever reasoned about, and with no policy served at all
+the site is running without the protection its own README describes.
+
 ## Layout
 
 ```
@@ -82,7 +115,7 @@ index.html          landing page and the benchmark panel
 projects/           experiment index, rendered from js/experiments.js
 writing/            posts (empty for now)
 css/                styles.css, plus generated fonts.css
-js/                 site.js, bench.js, sha256.js, edge.js, experiments.js, wasm_exec.js
+js/                 site.js, bench.js, sha256.js, edge.js, headers.js, experiments.js, wasm_exec.js
 fonts/              self-hosted latin subsets — no third-party font requests
 images/             the emblem
 main.wasm           built artifact, gitignored (make wasm)
@@ -153,7 +186,7 @@ not a theoretical one: Go 1.24 renamed the wasm import namespace from `go` to
 That `immutable` header buys browser caching only. The edge-cache-probe measures
 `main.wasm` coming back `DYNAMIC`, meaning Cloudflare never caches it and every
 cold visitor pulls all 2.4 MB from R2 — see
-[what it found](#what-it-found) above.
+[what the probe found](#what-the-probe-found) above.
 
 Uploading to the bucket is not the same as publishing. The custom domain sits
 behind Cloudflare's cache, which can keep serving the previous copy of a stable
@@ -230,7 +263,16 @@ cannot run. It permits WebAssembly compilation *without* permitting JavaScript
 `eval`, which plain `'self'` does not.
 
 The site uses no inline scripts and no `style` attributes, so `'unsafe-inline'`
-is not needed. This policy is verified against the built site, not assumed.
+is not needed.
+
+> **This policy is not currently being served.** The header-audit reports 0 of 4
+> on `https://x70.dev/`, so the Transform Rule above is either absent or not
+> matching. Until it is fixed, the block above describes an intention rather
+> than a deployed configuration.
+
+The audit is the check, and it runs against production rather than against the
+built tree — which is the only place the answer actually lives, since the rule
+is zone configuration and not a file in this repo.
 
 ## Licence
 

@@ -1,9 +1,10 @@
 // Page wiring: experiment rack, footer year, disclaimer dialog, and the
-// benchmark and edge-cache-probe panels when one is present.
+// benchmark, edge-cache-probe and header-audit panels when one is present.
 
 import { experiments } from './experiments.js';
 import { loadEngine, jsChain, paint, ITERATIONS, WARMUP } from './bench.js';
 import { PROBES, describe, readTrace, run as runProbes, summarise } from './edge.js';
+import { AUDIT_URL, audit, summarise as summariseAudit } from './headers.js';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString('en-US');
@@ -286,6 +287,100 @@ function wireProbe() {
   });
 }
 
+/* --- header audit --------------------------------------------------------- */
+
+// Escape anything that came off the wire before it goes near innerHTML. A
+// header value is attacker-influenced input in the general case, and this is
+// the one place in the site that renders one.
+const esc = (v) =>
+  String(v).replace(/[&<>"']/g, (ch) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+function wireAudit() {
+  const run = $('audit-run');
+  if (!run) return;
+
+  const body = $('audit-body');
+  const status = $('audit-status');
+  const verdict = $('audit-verdict');
+  const target = $('audit-target');
+
+  const STATE_LABEL = { pass: 'ok', fail: 'missing', warn: 'check' };
+
+  // An advisory header that is simply absent is not a finding, so it says so
+  // rather than borrowing the same word a real problem gets.
+  const label = (c) => (c.level === 'advisory' && c.state === 'warn' ? 'optional' : STATE_LABEL[c.state]);
+
+  const row = (check) => {
+    const li = document.createElement('li');
+    li.className = 'audit__row';
+
+    // A directive breakdown, but only for a CSP that is actually present.
+    const directives = check.directives
+      ? `<ul class="audit__csp">${check.directives
+          .map(
+            (d) => `
+        <li>
+          <div class="audit__dirline">
+            <span class="pill pill--sm" data-t="${d.state}">${STATE_LABEL[d.state]}</span>
+            <span class="audit__dir">${esc(d.directive)}</span>
+            <span class="audit__note" data-state="${d.state}">${esc(d.note || d.found || '')}</span>
+          </div>
+          ${d.state === 'fail' ? `<p class="audit__why">${d.why}</p>` : ''}
+        </li>`
+          )
+          .join('')}</ul>`
+      : '';
+
+    li.innerHTML = `
+      <div class="audit__top">
+        <span class="audit__name">${esc(check.name)}</span>
+        <span class="audit__level">${check.level}</span>
+        <span class="pill u-push" data-t="${check.state}">${label(check)}</span>
+      </div>
+      <p class="audit__found">${check.found === null ? 'not set' : esc(check.found)}</p>
+      ${check.note ? `<p class="audit__note" data-state="${check.state}">${esc(check.note)}</p>` : ''}
+      ${directives}
+      <p class="audit__why">${check.why}</p>`;
+    return li;
+  };
+
+  run.addEventListener('click', async () => {
+    run.disabled = true;
+    body.innerHTML = '';
+    verdict.hidden = true;
+    status.textContent = `Reading the headers on ${AUDIT_URL}…`;
+
+    try {
+      const result = await audit();
+
+      target.textContent = result.behindCloudflare
+        ? `${result.url} · HTTP ${result.httpStatus}`
+        : `${result.url} · not behind Cloudflare`;
+
+      for (const check of result.checks) {
+        // Hang the directive breakdown off the CSP row it belongs to.
+        const withCsp = check.name === 'content-security-policy' && result.csp
+          ? { ...check, directives: result.csp }
+          : check;
+        body.appendChild(row(withCsp));
+      }
+
+      const summary = summariseAudit(result);
+      verdict.hidden = false;
+      verdict.dataset.ok = String(summary.ok);
+      verdict.textContent = summary.text;
+
+      status.textContent = 'Done. This reflects the headers being served right now.';
+    } catch (err) {
+      console.error(err);
+      status.textContent = `Could not read the headers: ${err.message}`;
+    } finally {
+      run.disabled = false;
+    }
+  });
+}
+
 /* --- boot ----------------------------------------------------------------- */
 
 const rack = $('rack');
@@ -297,3 +392,4 @@ if (year) year.textContent = String(new Date().getFullYear());
 wireDisclaimer();
 wireBench();
 wireProbe();
+wireAudit();

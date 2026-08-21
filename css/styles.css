@@ -462,6 +462,102 @@ code {
 .pill[data-t='none'] { color: var(--none); }
 .pill[data-t='idle'] { color: var(--rule-lit); letter-spacing: 0; }
 
+/* The audit grades pass / warn / fail, which map onto the same three tones. */
+.pill[data-t='pass'] { color: var(--edge); }
+.pill[data-t='warn'] { color: var(--dim); }
+.pill[data-t='fail'] { color: var(--none); }
+.pill--sm { min-width: 4.5rem; font-size: 0.62rem; padding: 0.05rem 0.4rem; }
+
+/* --- header audit --------------------------------------------------------- */
+
+.audit { list-style: none; margin: 0; padding: 0; }
+
+.audit__row { padding: 1.1rem 0; border-bottom: 1px solid var(--rule); }
+.audit__row:first-child { padding-top: 0; }
+.audit__row:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.audit__top {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.audit__name {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+/* required vs advisory — the difference between a broken promise and a
+   suggestion, so it is worth showing on every row. */
+.audit__level {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dimmer);
+}
+
+/* The value actually served, verbatim. Long CSPs must wrap rather than push
+   the panel sideways. */
+.audit__found {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+
+ /* The note is only a complaint when the check actually failed. An advisory
+    header that is simply absent gets the neutral tone. */
+.audit__note {
+  margin: 0.35rem 0 0;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--dim);
+}
+.audit__note[data-state='fail'] { color: var(--none); }
+
+.audit__why {
+  margin: 0.6rem 0 0;
+  max-width: var(--measure);
+  font-size: 0.85rem;
+  color: var(--dim);
+}
+
+.audit__csp {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0 0 0 0.9rem;
+  border-left: 1px solid var(--rule);
+}
+.audit__csp li { padding: 0.22rem 0; }
+
+/* The token, the directive and the note share a line; the explanation below is
+   a block sibling rather than a flex item. Doing it with flex-basis instead
+   made the break depend on how long the note happened to be, because the
+   68ch measure on .audit__why clamped the basis below 100%. */
+.audit__dirline {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+}
+.audit__csp .audit__note { margin: 0; color: var(--dimmer); }
+.audit__csp .audit__note[data-state='fail'] { color: var(--none); }
+.audit__dir { color: var(--ink); }
+
+/* A failing directive explains itself underneath, in the body face rather than
+   mono — it is prose, and it is the part worth actually reading. */
+.audit__csp .audit__why {
+  margin: 0.3rem 0 0.6rem;
+  font-size: 0.82rem;
+}
+
 /* --- experiment rack ------------------------------------------------------ */
 
 .section { padding-block: clamp(2.5rem, 7vh, 4.5rem); border-top: 1px solid var(--rule); }

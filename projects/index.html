@@ -51,6 +51,72 @@
     <ul class="rack" id="rack"></ul>
   </section>
 
+  <section class="section wrap" aria-labelledby="audit-detail">
+    <div class="section__head">
+      <h2 class="section__title" id="audit-detail">header-audit</h2>
+      <span class="tok" data-s="live">live</span>
+    </div>
+    <div class="prose">
+      <p>
+        The README for this site publishes the security policy it is written against,
+        and claims that policy is verified rather than assumed. This checks the claim:
+        it reads the response headers off <code>/</code> and grades them against the
+        documented set, then explains what each one is actually holding shut.
+      </p>
+      <p>
+        It audits <b>this</b> site and no other, which is a hard limit rather than a
+        missing feature. A browser cannot read response headers from another domain:
+        a <code>no-cors</code> fetch returns an opaque response with nothing on it, and
+        a normal cross-origin fetch exposes only the CORS-safelisted headers unless the
+        far end opts in. Pointing an audit at somebody else&rsquo;s domain needs a server
+        to do the fetching, which a static bundle does not have.
+      </p>
+      <p>
+        The Content-Security-Policy is taken apart directive by directive, because a
+        policy can be present and still leave the important parts open.
+        <code>frame-ancestors</code>, <code>base-uri</code> and <code>form-action</code>
+        do <em>not</em> fall back to <code>default-src</code> &mdash; so
+        <code>default-src 'none'</code> can look like a complete answer while doing
+        nothing at all about framing, form targets or a rewritten
+        <code>&lt;base&gt;</code>.
+      </p>
+      <p class="label u-mt">
+        source · <a class="link" href="https://github.com/zroulston/x70.dev/blob/main/js/headers.js">js/headers.js</a>
+      </p>
+    </div>
+
+    <div class="panel u-mt">
+      <div class="panel__head">
+        <h3 class="section__title">Header audit</h3>
+        <p class="label">same-origin &middot; graded against the documented policy</p>
+        <p class="label label--raw u-push" id="audit-target"></p>
+      </div>
+
+      <div class="panel__body">
+        <ul class="audit" id="audit-body"></ul>
+
+        <p class="verdict" id="audit-verdict" hidden></p>
+
+        <div class="bench__controls">
+          <button class="btn" id="audit-run" type="button">Audit this site</button>
+          <span class="bench__status" id="audit-status" role="status">
+            One request, and it grades what comes back.
+          </span>
+        </div>
+
+        <p class="caveat">
+          <b>What this shows, and what it doesn&rsquo;t.</b> Headers are set per response,
+          so this grades <code>/</code> and not every path on the site &mdash; a rule that
+          matches the HTML but misses <code>/js/</code> would still read as a pass here.
+          A present header is also not a working one: this checks that the policy is
+          served and well-formed, not that a browser enforced it against a real attack.
+          <b>required</b> means the header is part of the documented policy;
+          <b>advisory</b> means it is a suggestion this site never committed to.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <section class="section wrap" aria-labelledby="probe-detail">
     <div class="section__head">
       <h2 class="section__title" id="probe-detail">edge-cache-probe</h2>

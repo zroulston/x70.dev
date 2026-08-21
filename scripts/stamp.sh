@@ -35,7 +35,9 @@ done
 sedi "s|url('fonts\.css')|url('fonts.css?v=$BUILD')|g" "$DIST/css/styles.css"
 
 # ES module imports, which resolve relative to the importing file.
-sedi "s|'\./experiments\.js'|'./experiments.js?v=$BUILD'|g; s|'\./bench\.js'|'./bench.js?v=$BUILD'|g; s|'\./edge\.js'|'./edge.js?v=$BUILD'|g" "$DIST/js/site.js"
+for m in experiments bench edge headers; do
+  sedi "s|'\./$m\.js'|'./$m.js?v=$BUILD'|g" "$DIST/js/site.js"
+done
 sedi "s|'\./sha256\.js'|'./sha256.js?v=$BUILD'|g" "$DIST/js/bench.js"
 
 if grep -rq "__BUILD__" "$DIST"; then
