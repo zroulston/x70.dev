@@ -12,6 +12,7 @@ on:
 #   CLOUDFLARE_API_TOKEN  — an API token with "Workers R2 Storage: Edit"
 #   R2_ACCOUNT_ID         — the Cloudflare account ID
 #   R2_BUCKET             — the bucket name
+#   CF_ZONE_ID            — the x70.dev zone, for the post-deploy cache purge
 #
 # The account ID and bucket name are not really secret, and masking them makes
 # a failed upload print *** instead of the bucket it tried. Prefer repository
@@ -20,6 +21,7 @@ env:
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
   BUCKET: ${{ vars.R2_BUCKET || secrets.R2_BUCKET }}
+  CF_ZONE_ID: ${{ vars.CF_ZONE_ID || secrets.CF_ZONE_ID }}
 
 jobs:
   build:
@@ -143,3 +145,30 @@ jobs:
           done <<< "$ordered"
 
           echo "published $count objects to $BUCKET"
+
+      # Uploading to the bucket is not the same as publishing. The custom
+      # domain sits behind Cloudflare's cache, which will keep serving the
+      # previous copy of a stable path like /js/bench.js until it is purged --
+      # so a deploy that skips this step appears to succeed while visitors
+      # continue to get the old site.
+      - name: Purge the Cloudflare cache
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CF_ZONE_ID:-}" ]; then
+            echo "::warning::CF_ZONE_ID is not set, so the CDN still holds the previous build. Set it to purge automatically."
+            exit 0
+          fi
+
+          response=$(curl -sS -X POST \
+            "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything":true}')
+
+          if echo "$response" | grep -q '"success":true'; then
+            echo "cache purged for zone $CF_ZONE_ID"
+          else
+            echo "$response"
+            echo "::warning::cache purge failed - the upload succeeded but visitors may still be served the previous build. The API token needs the Zone -> Cache Purge permission on this zone."
+          fi

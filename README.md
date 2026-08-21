@@ -101,6 +101,13 @@ not a theoretical one: Go 1.24 renamed the wasm import namespace from `go` to
 `gojs`, so an older cached shim fails to instantiate a newer binary with
 `Import #0 "gojs": module is not an object or function`.
 
+Uploading to the bucket is not the same as publishing. The custom domain sits
+behind Cloudflare's cache, which keeps serving the previous copy of a stable
+path like `/js/bench.js` until it is purged, so the workflow purges the zone
+after every upload. Without that step a deploy reports success while visitors
+continue to get the old site — and it is invisible to a spot check with a
+cache-busting query string, because that is a different cache key.
+
 Set these repository secrets (**Settings → Secrets and variables → Actions**):
 
 | Name                   | Value                                       |
@@ -108,6 +115,10 @@ Set these repository secrets (**Settings → Secrets and variables → Actions**
 | `CLOUDFLARE_API_TOKEN` | API token with **Workers R2 Storage: Edit** |
 | `R2_ACCOUNT_ID`        | the Cloudflare account ID                   |
 | `R2_BUCKET`            | `www-x70-dev`                               |
+| `CF_ZONE_ID`           | the `x70.dev` zone ID, for the cache purge  |
+
+The API token needs **Zone → Cache Purge** in addition to R2 write, or the
+purge step warns and the CDN keeps serving the previous build.
 
 The account ID and bucket name are not genuinely secret. Storing them as
 secrets works, but GitHub masks them in the logs, so a failed upload prints
