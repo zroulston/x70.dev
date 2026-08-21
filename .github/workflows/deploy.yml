@@ -13,13 +13,13 @@ on:
 #   R2_ACCOUNT_ID         — the Cloudflare account ID
 #   R2_BUCKET             — the bucket name
 #
-# The account ID and bucket name are not really secret. They are secrets here
-# only because that is how they are stored; the cost is that GitHub masks them
-# in the logs, so a failed upload shows *** instead of the name it tried.
+# The account ID and bucket name are not really secret, and masking them makes
+# a failed upload print *** instead of the bucket it tried. Prefer repository
+# variables so they show up in the log; fall back to secrets if not set.
 env:
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-  BUCKET: ${{ secrets.R2_BUCKET }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID || secrets.R2_ACCOUNT_ID }}
+  BUCKET: ${{ vars.R2_BUCKET || secrets.R2_BUCKET }}
 
 jobs:
   build:
@@ -84,6 +84,14 @@ jobs:
           : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN secret is not set}"
           : "${CLOUDFLARE_ACCOUNT_ID:?R2_ACCOUNT_ID secret is not set}"
           : "${BUCKET:?R2_BUCKET secret is not set}"
+
+          # Confirm the token, the account ID and the bucket name agree before
+          # uploading anything. This isolates a credentials problem from a
+          # content problem, and prints the target when the values are
+          # variables rather than masked secrets.
+          echo "target: account=$CLOUDFLARE_ACCOUNT_ID bucket=$BUCKET"
+          npx --yes wrangler@4 r2 bucket info "$BUCKET" \
+            || { echo "::error::cannot reach bucket '$BUCKET' in account '$CLOUDFLARE_ACCOUNT_ID' - check CLOUDFLARE_API_TOKEN permissions and that R2_ACCOUNT_ID matches the token's account"; exit 1; }
 
           content_type() {
             case "$1" in
