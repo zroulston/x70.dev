@@ -86,13 +86,18 @@ every upload. Two are load-bearing: `main.wasm` must be `application/wasm` or
 `instantiateStreaming` refuses it, and the ES modules must be `text/javascript`
 or the browser will not execute them.
 
-Set these on the repository (**Settings → Secrets and variables → Actions**):
+Set these repository secrets (**Settings → Secrets and variables → Actions**):
 
-| Kind     | Name                    | Value                                      |
-| -------- | ----------------------- | ------------------------------------------ |
-| Secret   | `CLOUDFLARE_API_TOKEN`  | API token with **Workers R2 Storage: Edit** |
-| Variable | `CLOUDFLARE_ACCOUNT_ID` | your Cloudflare account ID                  |
-| Variable | `R2_BUCKET`             | `www-x70-dev`                               |
+| Name                   | Value                                       |
+| ---------------------- | ------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN` | API token with **Workers R2 Storage: Edit** |
+| `R2_ACCOUNT_ID`        | the Cloudflare account ID                   |
+| `R2_BUCKET`            | `www-x70-dev`                               |
+
+The account ID and bucket name are not genuinely secret. Storing them as
+secrets works, but GitHub masks them in the logs, so a failed upload prints
+`***` instead of the bucket it tried. Moving them to repository *variables*
+makes failures easier to read; the workflow would then read them from `vars.`.
 
 ### Removing stale objects
 
