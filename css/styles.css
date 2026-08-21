@@ -236,12 +236,95 @@ code {
 }
 .hero__lede strong { color: var(--ink); font-weight: 500; }
 
+/* The emblem plate. The artwork is a single flat raster, so nothing inside it
+   can move on its own — the gear teeth only span the upper arc, so even that
+   cannot be made to turn. The motion is therefore overlay-only: a sheen
+   crossing the plate, and four indicator lamps sitting exactly on the bearings
+   the artwork already draws (measured off the source image, hence the odd
+   percentages). Only transform and opacity are animated, so this stays on the
+   compositor and never repaints the 1024px image.
+
+   The lamps are deliberately --ink and not --go or --js: those two are the
+   benchmark legend and must not start meaning something else here. */
+.emblem {
+  position: relative;
+  isolation: isolate; /* keep the lamps' blending off the page background */
+  border: 1px solid var(--rule);
+  line-height: 0;     /* no descender gap under the image */
+}
+
 .hero__emblem {
+  display: block;
   width: 100%;
   height: auto;
   aspect-ratio: 1;
-  border: 1px solid var(--rule);
   filter: saturate(0.75);
+}
+
+/* A slow pass of light across the plate: about five seconds of travel, then a
+   long wait, so it reads as an idle machine rather than a loading shimmer. */
+.emblem__sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.emblem__sheen::before {
+  content: '';
+  position: absolute;
+  top: -35%;
+  bottom: -35%;
+  left: -35%;
+  width: 20%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ink) 13%, transparent),
+    transparent);
+  transform: translateX(-40%) rotate(16deg);
+  animation: emblem-sheen 12s ease-in-out infinite;
+}
+
+@keyframes emblem-sheen {
+  0%, 55% { transform: translateX(-40%) rotate(16deg); }
+  100%    { transform: translateX(620%) rotate(16deg); }
+}
+
+/* Indicator lamps. Each runs at its own period so they drift permanently out
+   of phase instead of blinking in unison, and the negative delays start them
+   mid-cycle so the page never opens on four lamps lit together. */
+.emblem__lamp {
+  position: absolute;
+  width: 8%;
+  aspect-ratio: 1;
+  margin: -4% 0 0 -4%; /* centre the lamp on its coordinate */
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in srgb, var(--ink) 62%, transparent),
+    transparent 72%);
+  mix-blend-mode: screen; /* brighten the bearing that is already there */
+  opacity: 0.05;
+  animation: emblem-lamp 4.3s ease-in-out infinite;
+}
+
+.emblem__lamp--tl { left: 12.5%; top: 13.5%; animation-duration: 4.3s; animation-delay: -0.4s; }
+.emblem__lamp--tr { left: 86.6%; top: 13.6%; animation-duration: 5.7s; animation-delay: -2.1s; }
+.emblem__lamp--br { left: 86.6%; top: 86.4%; animation-duration: 3.9s; animation-delay: -3.2s; }
+.emblem__lamp--bl { left: 12.5%; top: 86.4%; animation-duration: 6.4s; animation-delay: -1.3s; }
+
+@keyframes emblem-lamp {
+  0%, 100% { opacity: 0.05; }
+  50%      { opacity: 0.38; }
+}
+
+/* Nothing here is load-bearing, so under reduced motion it simply stops. The
+   lamps hold a dim resting value rather than vanishing, which leaves the plate
+   looking powered but still. */
+@media (prefers-reduced-motion: reduce) {
+  .emblem__sheen { display: none; }
+  .emblem__lamp { animation: none; opacity: 0.1; }
 }
 
 /* --- benchmark: the signature panel --------------------------------------- */
@@ -727,7 +810,7 @@ dialog.sheet::backdrop { background: rgba(4, 6, 10, 0.78); backdrop-filter: blur
 
 @media (max-width: 52rem) {
   .hero__in { grid-template-columns: 1fr; }
-  .hero__emblem { max-width: 15rem; order: -1; }
+  .emblem { max-width: 15rem; order: -1; }
   .rail__nav { gap: 1rem; }
   .foot__build { margin-left: 0; width: 100%; }
   .pill { min-width: 5.5rem; }

@@ -58,10 +58,19 @@
           implementation of the same algorithm.
         </p>
       </div>
-      <img class="hero__emblem"
-           src="/images/man-in-hat.webp"
-           alt="The x70.dev emblem: a chrome mechanical medallion on black, ringed by circuit traces and gears."
-           width="1024" height="1024" fetchpriority="high" decoding="async">
+      <div class="emblem">
+        <img class="hero__emblem"
+             src="/images/man-in-hat.webp"
+             alt="The x70.dev emblem: a chrome mechanical medallion on black, ringed by circuit traces and gears."
+             width="1024" height="1024" fetchpriority="high" decoding="async">
+        <!-- Decorative only: the plate idles rather than sits. Hidden from
+             assistive tech, and stopped entirely under prefers-reduced-motion. -->
+        <span class="emblem__sheen" aria-hidden="true"></span>
+        <span class="emblem__lamp emblem__lamp--tl" aria-hidden="true"></span>
+        <span class="emblem__lamp emblem__lamp--tr" aria-hidden="true"></span>
+        <span class="emblem__lamp emblem__lamp--br" aria-hidden="true"></span>
+        <span class="emblem__lamp emblem__lamp--bl" aria-hidden="true"></span>
+      </div>
     </div>
   </section>
 
