@@ -44,7 +44,7 @@ dist: build
 	rm -rf dist && mkdir -p dist
 	cp index.html favicon.svg favicon.ico robots.txt sitemap.xml $(WASM) dist/
 	cp -R css js fonts images projects writing dist/
-	@./scripts/stamp.sh dist $(WASM)
+	@./scripts/stamp.sh dist
 
 	@echo "dist/ ready ($$(find dist -type f | wc -l | tr -d ' ') files, $$(du -sh dist | cut -f1))"
 

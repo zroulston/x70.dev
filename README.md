@@ -203,12 +203,23 @@ cache `HEAD` requests and reports `DYNAMIC` for all of them.
 Two things address it, and the first is what makes a deploy reliable:
 
 - `scripts/stamp.sh` rewrites every internal reference — the module imports,
-  the stylesheet link and its `@import`, and the wasm and shim URLs — to carry
-  a build id derived from `main.wasm`. Each deploy is therefore a new set of
-  cache keys, so a fresh page can never pull a stale module, with or without a
-  purge.
+  the stylesheet link and its `@import`, the image `src`, and the wasm and shim
+  URLs — to carry a build id derived from a hash of the whole published tree.
+  Each deploy is therefore a new set of cache keys, so a fresh page can never
+  pull a stale asset, with or without a purge.
+
+  The id covers the tree rather than just `main.wasm` because the wasm hash
+  could not see a change that never touches the binary. A new image or a CSS
+  tweak shipped with an unchanged id, kept its old cache key, and sat behind
+  the CDN's `max-age` until it expired — which for `/images/` is a full day.
+  The wasm/shim pairing still holds, because a new binary is also a new tree.
+
+  The absolute `og:image` and `twitter:image` URLs are deliberately left
+  unstamped, so social crawlers keep a stable address.
 - The workflow also purges the zone after uploading, which clears the previous
-  build rather than leaving it to expire.
+  build rather than leaving it to expire. **This step is currently a no-op**:
+  `CF_ZONE_ID` is not set, so every deploy so far has skipped the purge with a
+  warning and a green tick. Stamping is doing the whole job on its own.
 
 Set these repository secrets (**Settings → Secrets and variables → Actions**):
 
