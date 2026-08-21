@@ -109,12 +109,19 @@ jobs:
             esac
           }
 
-          # HTML must revalidate so a deploy is visible immediately; everything
-          # else is content that only changes when its bytes change.
+          # Anything the HTML depends on by a stable path must revalidate with
+          # it, or the two drift apart: a visitor holding day-old JS alongside
+          # fresh HTML runs a combination that was never deployed together.
+          # `no-cache` still stores the file, it just checks before reuse, so
+          # the usual answer is a 304 and no body.
+          #
+          # main.wasm is exempt because bench.js requests it with a hash of its
+          # own contents in the query string, which makes it truly immutable.
           cache_control() {
             case "$1" in
-              *.html) echo "public, max-age=0, must-revalidate" ;;
-              *)      echo "public, max-age=86400" ;;
+              *.html|*.js|*.mjs|*.css) echo "public, no-cache" ;;
+              *.wasm)                  echo "public, max-age=31536000, immutable" ;;
+              *)                       echo "public, max-age=86400" ;;
             esac
           }
 

@@ -86,6 +86,21 @@ every upload. Two are load-bearing: `main.wasm` must be `application/wasm` or
 `instantiateStreaming` refuses it, and the ES modules must be `text/javascript`
 or the browser will not execute them.
 
+### Caching
+
+HTML, JS and CSS are served `no-cache`, meaning the browser stores them but
+revalidates before reuse — normally a 304 with no body. They are cheap (about
+30 KB combined) and they must move together: a visitor holding day-old JS
+alongside fresh HTML is running a combination that was never deployed.
+
+`main.wasm` is the exception, served `immutable` for a year, because
+`bench.js` requests it with a hash of its own contents in the query string.
+That same hash also keys `wasm_exec.js`, so the shim and the binary can never
+be served from cache in mismatched versions — which is a real failure mode,
+not a theoretical one: Go 1.24 renamed the wasm import namespace from `go` to
+`gojs`, so an older cached shim fails to instantiate a newer binary with
+`Import #0 "gojs": module is not an object or function`.
+
 Set these repository secrets (**Settings → Secrets and variables → Actions**):
 
 | Name                   | Value                                       |
