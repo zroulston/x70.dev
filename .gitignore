@@ -1,2 +1,10 @@
 #!mac
 .DS_Store
+
+# build artifacts
+/main.wasm
+dist/
+
+# local tooling state
+.wrangler/
+.playwright-mcp/

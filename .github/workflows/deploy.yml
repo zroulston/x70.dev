@@ -1,0 +1,130 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# x70.dev is a single R2 bucket (www-x70-dev) with two custom domains bound to
+# it: x70.dev and assets.x70.dev. Everything is published to that one bucket.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN  — an API token with "Workers R2 Storage: Edit"
+#   R2_ACCOUNT_ID         — the Cloudflare account ID
+#   R2_BUCKET             — the bucket name
+#
+# The account ID and bucket name are not really secret. They are secrets here
+# only because that is how they are stored; the cost is that GitHub masks them
+# in the logs, so a failed upload shows *** instead of the name it tried.
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+  BUCKET: ${{ secrets.R2_BUCKET }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Vet
+        run: make check
+
+      - name: Test the JavaScript SHA-256 against a known-good implementation
+        run: make test
+
+      # `make dist` runs `make wasm`, which rebuilds main.wasm AND re-copies
+      # js/wasm_exec.js out of this toolchain's GOROOT. They are a matched pair.
+      - name: Build
+        run: make dist
+
+      - name: Check the wasm shim matches the compiling toolchain
+        run: |
+          diff "$(go env GOROOT)/lib/wasm/wasm_exec.js" dist/js/wasm_exec.js \
+            || { echo "::error::js/wasm_exec.js does not match $(go env GOVERSION)"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # R2 stores the content type per object, so it has to be set on upload —
+      # there is no server-side extension sniffing to fall back on. A wrong
+      # type here is fatal for two files in particular: main.wasm must be
+      # application/wasm for instantiateStreaming, and the ES modules must be
+      # text/javascript or the browser refuses to execute them.
+      - name: Publish to R2
+        run: |
+          set -euo pipefail
+
+          # Fail with a clear message rather than letting wrangler try to
+          # upload to a bucket called "".
+          : "${CLOUDFLARE_API_TOKEN:?CLOUDFLARE_API_TOKEN secret is not set}"
+          : "${CLOUDFLARE_ACCOUNT_ID:?R2_ACCOUNT_ID secret is not set}"
+          : "${BUCKET:?R2_BUCKET secret is not set}"
+
+          content_type() {
+            case "$1" in
+              *.html)  echo "text/html; charset=utf-8" ;;
+              *.css)   echo "text/css; charset=utf-8" ;;
+              *.js|*.mjs) echo "text/javascript; charset=utf-8" ;;
+              *.wasm)  echo "application/wasm" ;;
+              *.woff2) echo "font/woff2" ;;
+              *.webp)  echo "image/webp" ;;
+              *.svg)   echo "image/svg+xml" ;;
+              *.ico)   echo "image/x-icon" ;;
+              *.xml)   echo "application/xml" ;;
+              *.txt)   echo "text/plain; charset=utf-8" ;;
+              *)       echo "application/octet-stream" ;;
+            esac
+          }
+
+          # HTML must revalidate so a deploy is visible immediately; everything
+          # else is content that only changes when its bytes change.
+          cache_control() {
+            case "$1" in
+              *.html) echo "public, max-age=0, must-revalidate" ;;
+              *)      echo "public, max-age=86400" ;;
+            esac
+          }
+
+          # Upload main.wasm first, so a visitor loading the page mid-deploy
+          # never gets new page code pointing at an older engine.
+          ordered=$( { [ -f dist/main.wasm ] && echo dist/main.wasm
+                       find dist -type f ! -name main.wasm ! -name '*.html'
+                       find dist -type f -name '*.html'; } )
+
+          count=0
+          while IFS= read -r file; do
+            key="${file#dist/}"
+            npx --yes wrangler@4 r2 object put "$BUCKET/$key" \
+              --file "$file" \
+              --remote \
+              --content-type "$(content_type "$file")" \
+              --cache-control "$(cache_control "$file")"
+            count=$((count + 1))
+          done <<< "$ordered"
+
+          echo "published $count objects to $BUCKET"
