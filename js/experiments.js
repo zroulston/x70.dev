@@ -5,8 +5,8 @@
 //         'wip'     — partly built, not yet wired up
 //         'planned' — an intention, nothing built yet
 //
-// NOTE: only 'go-wasm-bench' below is real. The rest are placeholder slots
-// marked 'planned' — replace them with your own work.
+// NOTE: 'go-wasm-bench' and 'edge-cache-probe' below are real. The rest are
+// placeholder slots marked 'planned' — replace them with your own work.
 
 export const experiments = [
   {
@@ -18,8 +18,9 @@ export const experiments = [
   },
   {
     name: 'edge-cache-probe',
-    status: 'planned',
-    desc: 'Measure Cloudflare cache behaviour from the client side: hit ratios, ray IDs, and which colo answered.',
+    status: 'live',
+    href: '/projects/#edge-cache-probe',
+    desc: 'Reads cf-cache-status off this site’s own assets, twice each, to show which of them Cloudflare actually caches — and which reach the origin every time.',
     tags: ['cloudflare', 'edge', 'infra'],
   },
   {

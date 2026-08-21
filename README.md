@@ -26,6 +26,55 @@ SHA-256 is. That is the interesting part, and the page says so.
 
 The 2.3 MB binary is only downloaded when you press run.
 
+## The edge cache probe
+
+`/projects/#edge-cache-probe` requests six of this site's own assets twice each
+and reads `cf-cache-status` off every response, to check whether Cloudflare's
+edge actually does what the upload headers ask of it.
+
+Two things make it work:
+
+- **Everything is same-origin.** A cross-origin response exposes only the
+  CORS-safelisted headers unless the origin opts in with
+  `Access-Control-Expose-Headers`, and `cf-cache-status` is not on that list.
+  Because x70.dev serves the page and the assets, every header is readable.
+- **Every probe is sent with `cache: 'no-store'`.** Without it the browser
+  answers from its own cache, the request never reaches Cloudflare, and the
+  measurement is a fiction.
+
+Two passes rather than one, because a single request cannot separate an asset
+the edge declines to cache from one it has simply not seen yet — both look like
+a miss. `main.wasm` is requested as a one-byte range: cache eligibility does not
+depend on the range, and pulling 2.4 MB twice would cost more than the answer is
+worth.
+
+### What it found
+
+Measured from DFW on 2026-08-21, the three caching policies produce three
+different behaviours, and one of them is not the intended one:
+
+| Asset             | Header                   | `cf-cache-status` |
+| ----------------- | ------------------------ | ----------------- |
+| `.webp`, `.woff2` | `max-age=86400`          | `HIT`             |
+| `.css`, `.js`     | `no-cache`               | `REVALIDATED`     |
+| `main.wasm`, `/`  | `immutable` / `no-cache` | `DYNAMIC`         |
+
+The first two rows are working as designed. The third is not: `DYNAMIC` means
+the edge never considered the response cacheable, so **every request for the
+2.4 MB `main.wasm` and for the HTML reaches R2**, no matter that the wasm is
+uploaded `max-age=31536000, immutable`. Cloudflare's default cache is keyed on a
+list of static file extensions, and neither `.wasm` nor extensionless HTML is on
+it. `Cache-Control` does not add an asset to that list; only a Cache Rule does.
+
+So the `immutable` header on `main.wasm` is buying browser caching, which is
+real, and edge caching, which is not happening. Fixing it means a Cache Rule on
+the zone setting *Eligible for cache* for `/main.wasm` — zone configuration, not
+something this repo can carry, which is the same reason the security headers
+live in a Transform Rule.
+
+That is the experiment doing its job: the header was set correctly and the
+result was still wrong, and nothing short of measuring it would have said so.
+
 ## Layout
 
 ```
@@ -33,7 +82,7 @@ index.html          landing page and the benchmark panel
 projects/           experiment index, rendered from js/experiments.js
 writing/            posts (empty for now)
 css/                styles.css, plus generated fonts.css
-js/                 site.js, bench.js, sha256.js, experiments.js, wasm_exec.js
+js/                 site.js, bench.js, sha256.js, edge.js, experiments.js, wasm_exec.js
 fonts/              self-hosted latin subsets — no third-party font requests
 images/             the emblem
 main.wasm           built artifact, gitignored (make wasm)
@@ -101,10 +150,22 @@ not a theoretical one: Go 1.24 renamed the wasm import namespace from `go` to
 `gojs`, so an older cached shim fails to instantiate a newer binary with
 `Import #0 "gojs": module is not an object or function`.
 
+That `immutable` header buys browser caching only. The edge-cache-probe measures
+`main.wasm` coming back `DYNAMIC`, meaning Cloudflare never caches it and every
+cold visitor pulls all 2.4 MB from R2 — see
+[what it found](#what-it-found) above.
+
 Uploading to the bucket is not the same as publishing. The custom domain sits
-behind Cloudflare's cache, which keeps serving the previous copy of a stable
-path like `/js/bench.js` after a successful upload. This is invisible to a spot
-check with a cache-busting query string, because that is a different cache key.
+behind Cloudflare's cache, which can keep serving the previous copy of a stable
+path after a successful upload. This is invisible to a spot check with a
+cache-busting query string, because that is a different cache key.
+
+How much of a risk this is varies by asset, and the probe is what settles it:
+the fonts and images are true `HIT`s and would hold a stale copy for their full
+day, while the JS and CSS come back `REVALIDATED` — held at the edge but checked
+against R2 on every request, so a new upload is picked up without a purge. Note
+that a spot check with `curl -I` cannot see any of this: Cloudflare does not
+cache `HEAD` requests and reports `DYNAMIC` for all of them.
 
 Two things address it, and the first is what makes a deploy reliable:
 

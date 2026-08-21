@@ -51,6 +51,82 @@
     <ul class="rack" id="rack"></ul>
   </section>
 
+  <section class="section wrap" aria-labelledby="probe-detail">
+    <div class="section__head">
+      <h2 class="section__title" id="probe-detail">edge-cache-probe</h2>
+      <span class="tok" data-s="live">live</span>
+    </div>
+    <div class="prose">
+      <p>
+        This site sits behind Cloudflare, and every asset is uploaded with a deliberate
+        <code>Cache-Control</code> header. The probe below checks whether the edge
+        actually honours them, by requesting six of this site&rsquo;s own files twice each
+        and reading the <code>cf-cache-status</code> header off every response.
+      </p>
+      <p>
+        Two passes rather than one, because a single request cannot tell the difference
+        between an asset the edge declines to cache and one it simply has not seen yet.
+        Both come back <code>MISS</code>-shaped the first time; only the second pass
+        separates them.
+      </p>
+      <p>
+        It works because everything here is same-origin. A cross-origin response hides
+        every header except the CORS-safelisted ones, and <code>cf-cache-status</code>
+        is not among them &mdash; which is why this probe can only be pointed at the site
+        serving it.
+      </p>
+      <p class="label u-mt">
+        source · <a class="link" href="https://github.com/zroulston/x70.dev/blob/main/js/edge.js">js/edge.js</a>
+      </p>
+    </div>
+
+    <div class="panel u-mt">
+      <div class="panel__head">
+        <h3 class="section__title">Cache probe</h3>
+        <p class="label">same-origin &middot; two passes</p>
+        <p class="label label--raw u-push" id="probe-colo"></p>
+      </div>
+
+      <div class="panel__body">
+        <div class="probe__scroll">
+          <table class="probe">
+            <thead>
+              <tr>
+                <th scope="col">path</th>
+                <th scope="col">cache-control</th>
+                <th scope="col">pass 1</th>
+                <th scope="col">pass 2</th>
+                <th scope="col" class="probe__num">ms</th>
+              </tr>
+            </thead>
+            <tbody id="probe-body"></tbody>
+          </table>
+        </div>
+
+        <p class="verdict" id="probe-verdict" hidden></p>
+
+        <div class="bench__controls">
+          <button class="btn" id="probe-run" type="button">Probe the edge</button>
+          <span class="bench__status" id="probe-status" role="status">
+            Twelve requests to this site, about 300&nbsp;KB in total.
+          </span>
+        </div>
+
+        <p class="caveat">
+          <b>What this shows, and what it doesn&rsquo;t.</b> It reports the cache that
+          answered <em>your</em> request, at one Cloudflare colo, at one moment. A
+          <code>HIT</code> here says nothing about the colo nearest someone else, and an
+          asset that misses at a quiet edge may sit warm at a busy one. The browser cache
+          is stepped over deliberately &mdash; every probe is sent with
+          <code>cache: 'no-store'</code>, or the request would never reach Cloudflare and
+          the numbers would be measuring nothing. <code>/main.wasm</code> is requested as
+          a one-byte range, since cache eligibility does not depend on the range and
+          pulling 2.4&nbsp;MB twice would cost more than the answer is worth.
+        </p>
+      </div>
+    </div>
+  </section>
+
   <section class="section wrap" aria-labelledby="bench-detail">
     <div class="section__head">
       <h2 class="section__title" id="bench-detail">go-wasm-bench</h2>

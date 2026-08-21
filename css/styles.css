@@ -16,6 +16,11 @@
   --go:       #FFB454;
   --js:       #5CC8D7;
 
+  /* Cache states. Separate from --go/--js on purpose: those two are the
+     benchmark legend and must not mean anything else. */
+  --edge:     #6FCF97;
+  --none:     #E0533D;
+
   --ink:      #E6EAF0;
   --dim:      #8894A4;
   --dimmer:   #5A6675;
@@ -159,7 +164,7 @@ a { color: inherit; }
 }
 .lamp[data-state='loading']::before { background: var(--dim); animation: pulse 1.1s ease-in-out infinite; }
 .lamp[data-state='ready']::before   { background: var(--go); box-shadow: 0 0 10px 1px color-mix(in srgb, var(--go) 55%, transparent); }
-.lamp[data-state='error']::before   { background: #E0533D; }
+.lamp[data-state='error']::before   { background: var(--none); }
 .lamp[data-state='ready']            { color: var(--dim); }
 
 @keyframes pulse { 50% { opacity: 0.25; } }
@@ -172,6 +177,14 @@ a { color: inherit; }
 .u-mt   { margin-top: 1.5rem; }
 .section--flush { border-top: 0; }
 .caveat--lead { margin-bottom: 2rem; }
+
+/* Inline code, in prose and in caveats. The site had no rule for it, so it was
+   falling back to the browser's default monospace next to IBM Plex Mono. */
+code {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  color: var(--ink);
+}
 
 .prose { max-width: var(--measure); }
 .prose p { margin: 0 0 1rem; }
@@ -374,7 +387,7 @@ a { color: inherit; }
   color: var(--dim);
 }
 .verdict[data-ok='true']  { border-left-color: var(--go); color: var(--ink); }
-.verdict[data-ok='false'] { border-left-color: #E0533D; color: #F0A99B; }
+.verdict[data-ok='false'] { border-left-color: var(--none); color: #F0A99B; }
 
 .caveat {
   margin: 1.5rem 0 0;
@@ -383,6 +396,71 @@ a { color: inherit; }
   color: var(--dim);
 }
 .caveat b { color: var(--ink); font-weight: 500; }
+
+/* --- edge cache probe ----------------------------------------------------- */
+
+/* The table is the instrument here, so it gets a horizontal scroller of its
+   own rather than being allowed to widen the page on a narrow screen. */
+.probe__scroll { overflow-x: auto; }
+
+.probe {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.probe th,
+.probe td {
+  padding: 0.55rem 0.9rem 0.55rem 0;
+  border-bottom: 1px solid var(--rule);
+  font-weight: 400;
+}
+.probe tbody tr:last-child th,
+.probe tbody tr:last-child td { border-bottom: 0; }
+
+.probe thead th {
+  color: var(--dimmer);
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-bottom-color: var(--rule-lit);
+}
+
+.probe__path { color: var(--ink); }
+.probe__cc   { color: var(--dim); }
+.probe__num  { text-align: right; padding-right: 0; font-variant-numeric: tabular-nums; }
+.probe__ms   { color: var(--dim); }
+
+.probe__hint {
+  color: var(--dimmer);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+}
+
+/* A row dims while its two passes are in flight, so the reader can see which
+   request the status line is talking about. */
+.probe tr[data-busy='true'] { opacity: 0.45; }
+
+/* The cache-status token. Three tones, and they carry the finding: green
+   answered from the edge, neutral went to the origin to check, red was never
+   cached at all. */
+.pill {
+  display: inline-block;
+  min-width: 6.5rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid currentColor;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-align: center;
+  color: var(--dimmer);
+}
+.pill[data-t='edge'] { color: var(--edge); }
+.pill[data-t='warm'] { color: var(--dim); }
+.pill[data-t='none'] { color: var(--none); }
+.pill[data-t='idle'] { color: var(--rule-lit); letter-spacing: 0; }
 
 /* --- experiment rack ------------------------------------------------------ */
 
@@ -556,6 +634,7 @@ dialog.sheet::backdrop { background: rgba(4, 6, 10, 0.78); backdrop-filter: blur
   .hero__emblem { max-width: 15rem; order: -1; }
   .rail__nav { gap: 1rem; }
   .foot__build { margin-left: 0; width: 100%; }
+  .pill { min-width: 5.5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

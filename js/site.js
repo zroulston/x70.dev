@@ -1,8 +1,9 @@
 // Page wiring: experiment rack, footer year, disclaimer dialog, and the
-// benchmark panel when one is present.
+// benchmark and edge-cache-probe panels when one is present.
 
 import { experiments } from './experiments.js';
 import { loadEngine, jsChain, paint, ITERATIONS, WARMUP } from './bench.js';
+import { PROBES, describe, readTrace, run as runProbes, summarise } from './edge.js';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString('en-US');
@@ -165,6 +166,126 @@ function wireBench() {
   });
 }
 
+/* --- edge cache probe ----------------------------------------------------- */
+
+// A cf-cache-status is reported in one of three colours: served by the edge,
+// held by the edge but revalidated against the origin, or never cached at all.
+// The benchmark trace colours are deliberately not reused here — amber and
+// cyan mean go and javascript everywhere else on this site.
+function tone(status) {
+  const s = describe(status);
+  if (!s.edge) return 'none';
+  return s.origin ? 'warm' : 'edge';
+}
+
+function wireProbe() {
+  const run = $('probe-run');
+  if (!run) return;
+
+  const tbody = $('probe-body');
+  const status = $('probe-status');
+  const verdict = $('probe-verdict');
+  const colo = $('probe-colo');
+
+  // Render the rows up front, empty, so the table does not resize under the
+  // reader while the probe is running.
+  const cells = new Map();
+  for (const target of PROBES) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <th scope="row" class="probe__path">${target.path}${target.range ? ' <span class="probe__hint">1-byte range</span>' : ''}</th>
+      <td class="probe__cc">${target.policy}</td>
+      <td class="probe__cell"><span class="pill" data-t="idle">—</span></td>
+      <td class="probe__cell"><span class="pill" data-t="idle">—</span></td>
+      <td class="probe__num probe__ms">—</td>`;
+    tbody.appendChild(tr);
+    const pills = tr.querySelectorAll('.pill');
+    cells.set(target.path, { first: pills[0], second: pills[1], ms: tr.querySelector('.probe__ms'), row: tr });
+  }
+
+  const setPill = (el, result) => {
+    if (!result.ok) {
+      el.dataset.t = 'none';
+      el.textContent = result.error ? 'failed' : `HTTP ${result.httpStatus}`;
+      el.title = result.error || '';
+      return;
+    }
+    el.dataset.t = tone(result.status);
+    el.textContent = result.status;
+    // The age header is only meaningful on a hit, and it is the one number
+    // that says how long the edge has actually been holding this copy.
+    const age = result.age !== null ? ` · age ${result.age}s` : '';
+    el.title = `${describe(result.status).note}${age}`;
+  };
+
+  const reset = () => {
+    for (const { first, second, ms, row } of cells.values()) {
+      for (const el of [first, second]) {
+        el.dataset.t = 'idle';
+        el.textContent = '—';
+        el.removeAttribute('title');
+      }
+      ms.textContent = '—';
+      row.removeAttribute('data-busy');
+    }
+    verdict.hidden = true;
+  };
+
+  run.addEventListener('click', async () => {
+    run.disabled = true;
+    reset();
+
+    try {
+      status.textContent = 'Asking Cloudflare which colo is answering…';
+      const trace = await readTrace();
+      colo.textContent = trace
+        ? `colo ${trace.colo} · ${trace.loc} · ${trace.http} · ${trace.tls}`
+        : 'not behind Cloudflare';
+
+      if (!trace) {
+        // The honest local-development answer. Every probe below would report
+        // NONE, which says nothing about the real edge.
+        status.textContent =
+          'This copy of the site is not being served through Cloudflare, so there are no edge headers to read. Try it on https://x70.dev/projects/.';
+        verdict.hidden = false;
+        verdict.dataset.ok = 'false';
+        verdict.textContent =
+          'No cf-cache-status on any response — nothing is measurable from here. That is the correct result for a local build, not a failure.';
+        return;
+      }
+
+      // Fill each row in as its answer lands, rather than holding the whole
+      // table blank until the last request returns.
+      const rows = await runProbes({
+        onPass: (target, pass) => {
+          cells.get(target.path).row.dataset.busy = 'true';
+          status.textContent = `Pass ${pass} of 2 — requesting ${target.path}…`;
+        },
+        onRow: ({ target, first, second }) => {
+          const cell = cells.get(target.path);
+          setPill(cell.first, first);
+          setPill(cell.second, second);
+          cell.ms.textContent = second.ok ? second.ms.toFixed(0) : '—';
+          cell.row.removeAttribute('data-busy');
+        },
+      });
+
+      const result = summarise(rows);
+      verdict.hidden = false;
+      verdict.dataset.ok = String(result.ok);
+      verdict.textContent = result.text;
+
+      status.textContent = 'Done. Run it again — the second run starts with a warmer edge.';
+    } catch (err) {
+      console.error(err);
+      status.textContent = `Could not finish the probe: ${err.message}`;
+    } finally {
+      for (const { row } of cells.values()) row.removeAttribute('data-busy');
+      run.disabled = false;
+    }
+  });
+}
+
 /* --- boot ----------------------------------------------------------------- */
 
 const rack = $('rack');
@@ -175,3 +296,4 @@ if (year) year.textContent = String(new Date().getFullYear());
 
 wireDisclaimer();
 wireBench();
+wireProbe();
